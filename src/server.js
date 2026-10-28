@@ -12,6 +12,7 @@ import {
 } from './categorias.js';
 import { apagarBanco, criarBanco, definirApelidoCartao, editarBanco, listarBancos } from './bancos.js';
 import * as patrimonio from './patrimonio.js';
+import { apagarConta, editarConta, lancarConta } from './contas.js';
 import * as analises from './analises.js';
 import { definirApelido, desetiquetar, etiquetar, removerEtiqueta } from './marcacoes.js';
 import {
@@ -79,6 +80,22 @@ export function criarApp({
     else definirCategoria(db, id, categoriaId, { criarRegra: regra });
     return consultas.transacoes(db, {}).find((t) => t.id === id) ?? null;
   });
+
+  // Contas normais lançadas à mão (aluguel, luz...): contam no mês do vencimento.
+  const CONTA = {
+    type: 'object',
+    properties: {
+      data: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      descricao: { type: 'string', minLength: 1, maxLength: 120 },
+      valorCentavos: { type: 'integer', minimum: 1 },
+      categoriaId: { type: ['integer', 'null'] },
+    },
+    additionalProperties: false,
+  };
+  app.post('/api/contas', { schema: { body: { ...CONTA, required: ['data', 'descricao', 'valorCentavos'] } } },
+    async (req) => lancarConta(db, req.body));
+  app.put('/api/contas/:id', { schema: { ...paramIdNum, body: CONTA } }, async (req) => editarConta(db, req.params.id, req.body));
+  app.delete('/api/contas/:id', { schema: paramIdNum }, async (req) => apagarConta(db, req.params.id));
 
   // Ações em lote: mesma categoria para várias transações.
   app.post('/api/transacoes/categoria', {

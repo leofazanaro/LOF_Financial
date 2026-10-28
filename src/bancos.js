@@ -6,7 +6,7 @@ import { normalizar } from './importers/util.js';
 const COR = /^#[0-9a-f]{6}$/i;
 
 /** Nomes usados quando um importador traz um banco ainda não cadastrado. */
-const NOMES_PADRAO = { nubank: 'Nubank', inter: 'Inter' };
+const NOMES_PADRAO = { nubank: 'Nubank', inter: 'Inter', contas: 'Contas' };
 
 export function garantirBanco(db, codigo) {
   db.prepare('INSERT OR IGNORE INTO bancos (codigo, nome) VALUES (?, ?)').run(codigo, NOMES_PADRAO[codigo] ?? codigo);
@@ -81,6 +81,7 @@ export function editarBanco(db, codigo, dados) {
 
 /** Só apaga banco sem lançamentos — os dados de faturas não são apagados por aqui. */
 export function apagarBanco(db, codigo) {
+  if (codigo === 'contas') throw new Error('O banco "Contas" guarda as contas lançadas à mão e não pode ser apagado');
   const b = db.prepare('SELECT (SELECT count(*) FROM transacoes WHERE banco = ?) AS n').get(codigo);
   if (b.n > 0) throw new Error(`Este banco tem ${b.n} lançamentos importados; não pode ser apagado`);
   if (!db.prepare('DELETE FROM bancos WHERE codigo = ?').run(codigo).changes) throw new Error('Banco não encontrado');

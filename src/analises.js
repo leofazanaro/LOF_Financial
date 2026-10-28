@@ -13,12 +13,14 @@ export function somarMeses(ref, n) {
 
 /** Última fatura importada de cada banco: { nubank: '2026-01', inter: '2026-01' } */
 function ultimaReferenciaPorBanco(db) {
-  return Object.fromEntries(db.prepare('SELECT banco, max(referencia) AS ref FROM faturas GROUP BY banco').all()
+  return Object.fromEntries(db.prepare("SELECT banco, max(referencia) AS ref FROM faturas WHERE banco <> 'contas' GROUP BY banco").all()
     .map((r) => [r.banco, r.ref]));
 }
 
+/** Último mês de fatura de cartão (contas lançadas para o futuro não mudam o mês padrão). */
 export function ultimaReferencia(db) {
-  return db.prepare('SELECT max(referencia) AS ref FROM faturas').get().ref;
+  return db.prepare("SELECT max(referencia) AS ref FROM faturas WHERE banco <> 'contas'").get().ref
+    ?? db.prepare('SELECT max(referencia) AS ref FROM faturas').get().ref;
 }
 
 // ---------- 1. parcelas futuras ----------
@@ -91,7 +93,7 @@ function historicoPorEstabelecimento(db) {
       max(t.descricao) AS descricao, max(c.nome) AS categoria
     FROM transacoes t JOIN faturas f ON f.id = t.fatura_id
     LEFT JOIN categorias c ON c.id = t.categoria_id
-    WHERE t.tipo = 'compra' AND t.parcela_total IS NULL AND ${CONSIDERADA}
+    WHERE t.tipo = 'compra' AND t.parcela_total IS NULL AND ${CONSIDERADA} AND t.banco <> 'contas'
     GROUP BY t.banco, t.chave, f.referencia ORDER BY f.referencia`).all();
   const mapa = new Map();
   for (const l of linhas) {

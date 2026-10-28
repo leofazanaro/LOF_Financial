@@ -284,7 +284,7 @@ async function telaVisaoGeral({ filtros }) {
   const temLimite = orc.itens.some((i) => i.limite);
   $app.innerHTML = `
     <h1>Visão geral</h1>
-    <p class="sub">Gastos de cartão por mês da fatura.
+    <p class="sub">Gastos de cartão por mês da fatura e <a href="#/transacoes">contas lançadas</a> pelo mês do vencimento.
       ${r.desconsiderados.qtd ? `<a href="#/desconsiderados?${qs({ de: filtros.de, ate: filtros.ate, banco: filtros.banco })}">${r.desconsiderados.qtd} lançamentos desconsiderados</a> (pagamentos de fatura e itens marcados) não entram nos totais.` : ''}</p>
     ${barraFiltros(filtros)}
     <div class="cards">
@@ -350,16 +350,55 @@ async function telaCategoria({ param, filtros }) {
 
 // ---------- transações ----------
 
+let contaEditando = null; // null = formulário fechado; 'nova' ou o id da conta em edição
+
 async function telaTransacoes({ filtros }) {
   const lista = await api(`/api/transacoes?${qs(filtros)}`);
   const total = lista.reduce((s, t) => s + t.valor_centavos, 0);
+  const editando = contaEditando === 'nova' ? {} : lista.find((t) => t.id === contaEditando && t.manual);
+  if (contaEditando !== 'nova' && !editando) contaEditando = null;
   $app.innerHTML = `
     <h1>Transações</h1>
     <p class="sub">${lista.length} lançamentos · ${brl(total)}. Troque a categoria, dê apelidos e etiquete direto na tabela.</p>
     ${barraFiltros(filtros, { categoria: true, etiqueta: true, busca: true })}
+    <section class="painel bloco" id="contas">
+      ${contaEditando ? formConta(editando) : `<div class="lista-linha"><button class="link" id="nova-conta">+ Nova conta</button>
+        <span class="muted">Aluguel, luz, internet… pagos fora do cartão. Contam no mês do vencimento.</span></div>`}
+    </section>
     <section class="painel">${editorTransacoes(lista)}</section>`;
   ligarFiltros('transacoes');
+  ligarConta(editando);
   ligarEditor();
+}
+
+/** Formulário de conta normal (nova ou edição). Sem categoria, as regras automáticas decidem. */
+function formConta(t) {
+  const hoje = new Date().toLocaleDateString('sv-SE');
+  return `<h2>${t.id ? 'Editar conta' : 'Nova conta'}</h2>
+    <form id="form-conta" class="campos">
+      <label class="largo">Descrição<input name="descricao" required maxlength="120" value="${esc(t.descricao ?? '')}" placeholder="ex.: Aluguel, Conta de luz"></label>
+      <label>Valor (R$)<input name="valor" required inputmode="decimal" value="${reaisCampo(t.valor_centavos)}" placeholder="ex.: 1.500,00"></label>
+      <label>Vencimento<input type="date" name="data" required value="${t.data ?? hoje}"></label>
+      <label>Categoria<select name="categoria"><option value="">automática (pelas regras)</option>
+        ${opcoes.categorias.map((c) => `<option value="${c.id}" ${t.categoria_origem === 'manual' && c.id === t.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></label>
+      <div class="barra-acoes largo"><button class="primario">${t.id ? 'Salvar' : 'Lançar conta'}</button>
+        <button type="button" class="link" id="cancelar-conta">cancelar</button></div>
+    </form>`;
+}
+
+function ligarConta(editando) {
+  document.getElementById('nova-conta')?.addEventListener('click', () => { contaEditando = 'nova'; render(); });
+  document.getElementById('cancelar-conta')?.addEventListener('click', () => { contaEditando = null; render(); });
+  document.getElementById('form-conta')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    let valorCentavos;
+    try { valorCentavos = lerValor(d.valor); if (!(valorCentavos > 0)) throw new Error(); } catch { return aviso('Valor inválido', true); }
+    const body = { descricao: d.descricao, valorCentavos, data: d.data, categoriaId: d.categoria ? Number(d.categoria) : null };
+    const id = editando?.id;
+    acao(() => api(id ? `/api/contas/${id}` : '/api/contas', { method: id ? 'PUT' : 'POST', body }),
+      id ? 'Conta salva' : 'Conta lançada').then((ok) => { if (ok) { contaEditando = null; render(); } });
+  });
 }
 
 /**
@@ -391,7 +430,7 @@ function editorTransacoes(lista) {
         <th>Data</th><th>Banco</th><th>Descrição</th><th class="num">Valor</th><th>Categoria</th><th>Origem</th></tr></thead>
       <tbody>${lista.map((t) => `<tr data-id="${t.id}" data-chave="${esc(t.chave)}" data-nome="${esc(t.apelido ?? t.descricao)}" class="${t.categoria_id ? '' : 'pendente'}">
         <td><input type="checkbox" data-sel aria-label="Selecionar"></td>
-        <td>${dataBR(t.data)}<div class="muted">fatura ${mes(t.referencia)}</div></td>
+        <td>${dataBR(t.data)}<div class="muted">${t.manual ? 'vencimento' : `fatura ${mes(t.referencia)}`}</div></td>
         <td>${nomeBanco(t.banco)}${t.cartao_final ? `<div class="muted">${esc(nomeCartao(t.banco, t.cartao_final))}</div>` : ''}</td>
         <td class="desc">
           <b>${esc(t.apelido ?? t.descricao)}</b>${t.parcela_total ? ` <span class="muted">parcela ${t.parcela_atual}/${t.parcela_total}</span>` : ''}
@@ -404,7 +443,9 @@ function editorTransacoes(lista) {
         <td class="num">${brl(t.valor_centavos)}</td>
         <td><select aria-label="Categoria" data-categoria>${opts(t.categoria_id)}</select></td>
         <td>${seloOrigem(t)}
-          <div><button class="link perigo" data-desconsiderar title="Tirar este lançamento dos relatórios e totais">⊘ desconsiderar</button></div></td>
+          <div><button class="link perigo" data-desconsiderar title="Tirar este lançamento dos relatórios e totais">⊘ desconsiderar</button></div>
+          ${t.manual ? `<div><button class="link" data-editar-conta>✎ editar</button>
+            <button class="link perigo" data-apagar-conta>apagar</button></div>` : ''}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
@@ -453,6 +494,13 @@ function ligarEditor() {
     tr.querySelectorAll('[data-tirar]').forEach((b) => b.addEventListener('click', () =>
       acao(() => api(`/api/transacoes/${id}/etiquetas/${b.dataset.tirar}`, { method: 'DELETE' }), 'Etiqueta removida')));
     tr.querySelector('[data-desconsiderar]').addEventListener('click', () => desconsiderar([id]));
+    tr.querySelector('[data-editar-conta]')?.addEventListener('click', () => {
+      contaEditando = id;
+      render().then(() => document.getElementById('contas')?.scrollIntoView({ block: 'start' }));
+    });
+    tr.querySelector('[data-apagar-conta]')?.addEventListener('click', () => {
+      if (confirm(`Apagar a conta “${tr.dataset.nome}”?`)) acao(() => api(`/api/contas/${id}`, { method: 'DELETE' }), 'Conta apagada');
+    });
   });
 
   // Seleção e ações em lote
@@ -528,7 +576,7 @@ async function telaDesconsiderados({ filtros }) {
           <th>Data</th><th>Banco</th><th>Descrição</th><th class="num">Valor</th><th>Motivo</th><th>Decisão</th><th></th></tr></thead>
         <tbody>${lista.map((t) => `<tr data-id="${t.id}">
           <td><input type="checkbox" data-sel-d aria-label="Selecionar"></td>
-          <td>${dataBR(t.data)}<div class="muted">fatura ${mes(t.referencia)}</div></td>
+          <td>${dataBR(t.data)}<div class="muted">${t.manual ? 'vencimento' : `fatura ${mes(t.referencia)}`}</div></td>
           <td>${nomeBanco(t.banco)}${t.cartao_final ? `<div class="muted">${esc(nomeCartao(t.banco, t.cartao_final))}</div>` : ''}</td>
           <td><b>${esc(t.apelido ?? t.descricao)}</b>${t.parcela_total ? ` <span class="muted">parcela ${t.parcela_atual}/${t.parcela_total}</span>` : ''}
             <div class="muted">original: ${esc(t.descricao_original)}${t.categoria ? ` · ${esc(t.categoria)}` : ''}</div></td>

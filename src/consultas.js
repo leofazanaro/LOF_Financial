@@ -81,7 +81,7 @@ export function transacoes(db, filtros) {
   const { sql, args } = filtrar(filtros);
   return comEtiquetas(db.prepare(`SELECT t.id, t.banco, t.cartao_final, f.referencia, t.data, t.descricao,
       t.descricao_original, t.chave, a.apelido, t.valor_centavos, t.tipo, t.parcela_atual, t.parcela_total,
-      t.categoria_id, c.nome AS categoria, t.categoria_origem, r.padrao AS regra, t.desconsiderada_origem, ${ETIQUETAS}
+      t.categoria_id, c.nome AS categoria, t.categoria_origem, r.padrao AS regra, t.desconsiderada_origem, t.manual, ${ETIQUETAS}
     ${FROM} LEFT JOIN regras r ON r.id = t.regra_id
     WHERE ${sql} ORDER BY t.data DESC, t.id DESC`).all(...args));
 }
@@ -112,5 +112,5 @@ export function etiquetas(db) {
 export function importacoes(db) {
   return db.prepare(`SELECT i.id, i.banco, i.formato, i.arquivo_nome, i.importado_em, i.qtd_transacoes,
       f.referencia, f.total_centavos
-    FROM importacoes i LEFT JOIN faturas f ON f.importacao_id = i.id ORDER BY i.id DESC`).all();
+    FROM importacoes i LEFT JOIN faturas f ON f.importacao_id = i.id WHERE i.formato <> 'manual' ORDER BY i.id DESC`).all();
 }
