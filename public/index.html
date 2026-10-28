@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel Financeiro</title>
+  <link rel="stylesheet" href="/style.css">
+  <script>try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <script src="/vendor/echarts/echarts.min.js" defer></script>
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <header class="topo">
+    <button type="button" class="botao-menu" id="abrir-menu" aria-controls="menu" aria-expanded="false" aria-label="Abrir menu">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <a class="marca" href="#/">Painel Financeiro</a>
+    <span class="pagina-atual" id="pagina-atual"></span>
+  </header>
+  <div class="fundo-menu" id="fundo-menu" hidden></div>
+  <aside class="gaveta" id="menu" aria-label="Menu" inert>
+    <div class="gaveta-topo">
+      <span class="marca">Painel Financeiro</span>
+      <button type="button" class="botao-menu" id="fechar-menu" aria-label="Fechar menu">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <nav>
+      <a href="#/" data-rota="">Visão geral</a>
+      <a href="#/transacoes" data-rota="transacoes">Transações</a>
+      <a href="#/parcelas" data-rota="parcelas">Parcelas</a>
+      <a href="#/assinaturas" data-rota="assinaturas">Assinaturas</a>
+      <a href="#/orcamento" data-rota="orcamento">Orçamento</a>
+      <a href="#/patrimonio" data-rota="patrimonio">Patrimônio</a>
+      <a href="#/desconsiderados" data-rota="desconsiderados">Desconsiderados</a>
+      <a href="#/importar" data-rota="importar">Importar</a>
+      <a href="#/categorias" data-rota="categorias bancos regras">Configurar</a>
+    </nav>
+    <div class="gaveta-rodape">
+      <button type="button" class="alternar-tema" id="alternar-tema" role="switch" aria-checked="false">
+        <span>Tema escuro</span><span class="trilho" aria-hidden="true"><span class="botao"></span></span>
+      </button>
+    </div>
+  </aside>
+  <main id="app" aria-live="polite"></main>
+  <div id="aviso" role="status" hidden></div>
+</body>
+</html>

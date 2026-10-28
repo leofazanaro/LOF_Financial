@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "painel-teste",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "DB_PATH=/tmp/claude-1000/-home-lof-Projects-painel-financeiro/7f4219e8-8a98-4694-9e92-ce92cb06571a/scratchpad/teste-ui.db",
+        "PORT=3001",
+        "/home/lof/.local/opt/node/bin/node",
+        "src/server.js"
+      ],
+      "port": 3001
+    }
+  ]
+}

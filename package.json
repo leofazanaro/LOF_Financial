@@ -1,0 +1,24 @@
+{
+  "name": "painel-financeiro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "import": "node scripts/import.js",
+    "cat": "node scripts/categorias.js",
+    "reconstruir": "node scripts/reconstruir-patrimonio.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/static": "^10.1.7",
+    "echarts": "^6.1.0",
+    "fastify": "^5.12.7",
+    "papaparse": "^5.4.1",
+    "pdfjs-dist": "^4.10.38"
+  }
+}
