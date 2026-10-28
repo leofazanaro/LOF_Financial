@@ -184,12 +184,14 @@ const tooltipBase = () => ({
 /** Barras horizontais, uma cor só: o comprimento já mostra a grandeza. */
 function graficoCategorias(el, porCategoria, aoClicar) {
   const dados = [...porCategoria].reverse();
+  const total = dados.reduce((s, d) => s + d.total, 0);
+  const parte = (v) => (total ? `${((v / total) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '');
   const g = novoGrafico(el);
   el.style.height = `${Math.max(220, dados.length * 34 + 40)}px`;
   g.resize();
   g.setOption({
-    grid: { left: 8, right: 90, top: 8, bottom: 8, containLabel: true },
-    tooltip: { ...tooltipBase(), trigger: 'item', formatter: (p) => `${esc(p.name)}<br><b>${brl(p.value)}</b> · ${dados[p.dataIndex].qtd} lançamentos` },
+    grid: { left: 8, right: 140, top: 8, bottom: 8, containLabel: true },
+    tooltip: { ...tooltipBase(), trigger: 'item', formatter: (p) => `${esc(p.name)}<br><b>${brl(p.value)}</b> · ${parte(p.value)} do total · ${dados[p.dataIndex].qtd} lançamentos` },
     xAxis: { type: 'value', ...eixoBase(), axisLabel: { show: false }, splitLine: { show: false } },
     yAxis: { type: 'category', data: dados.map((d) => d.nome), ...eixoBase() },
     series: [{
@@ -198,7 +200,7 @@ function graficoCategorias(el, porCategoria, aoClicar) {
         value: d.total,
         itemStyle: { color: d.id == null ? css('--series-4') : css('--series-1'), borderRadius: [0, 4, 4, 0] },
       })),
-      label: { show: true, position: 'right', color: css('--text-2'), formatter: (p) => brl(p.value) },
+      label: { show: true, position: 'right', color: css('--text-2'), formatter: (p) => `${brl(p.value)} · ${parte(p.value)}` },
     }],
   });
   g.on('click', (p) => aoClicar(dados[p.dataIndex]));
