@@ -169,6 +169,9 @@ function novoGrafico(el) {
 }
 function descartarGraficos() { graficos.forEach((g) => g.dispose()); graficos = []; }
 addEventListener('resize', () => graficos.forEach((g) => g.resize()));
+// Celular: os gráficos mudam de layout (não só de tamanho), então redesenha ao cruzar o limite.
+const telaEstreita = matchMedia('(max-width: 600px)');
+telaEstreita.addEventListener('change', () => render());
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render());
 
 const eixoBase = () => ({
@@ -183,26 +186,48 @@ const tooltipBase = () => ({
   confine: true, extraCssText: 'max-width: 100%; white-space: normal;',
 });
 
+/**
+ * Layout das barras horizontais. Na tela estreita o nome vai acima da barra (em vez de numa coluna à
+ * esquerda), a barra ocupa a largura toda e o valor ao lado perde os centavos.
+ */
+function layoutBarras(el, nomes, rotulo) {
+  const estreito = telaEstreita.matches;
+  el.style.height = estreito ? `${nomes.length * 46 + 24}px` : `${Math.max(220, nomes.length * 34 + 40)}px`;
+  const yAxis = { type: 'category', data: nomes, ...eixoBase() };
+  if (!estreito) {
+    return {
+      barMaxWidth: 22, label: { show: true, position: 'right', color: css('--text-2'), formatter: (p) => rotulo(p.dataIndex, false) },
+      opcoes: { grid: { left: 8, right: 140, top: 8, bottom: 8, containLabel: true }, yAxis },
+    };
+  }
+  yAxis.axisLine = { show: false };
+  yAxis.axisLabel = { inside: true, margin: 0, align: 'left', verticalAlign: 'bottom', padding: [0, 0, 9, 0], color: css('--text'), fontSize: 13 };
+  return {
+    barMaxWidth: 12, label: { show: true, position: 'right', color: css('--text-2'), fontSize: 12, formatter: (p) => rotulo(p.dataIndex, true) },
+    opcoes: { grid: { left: 0, right: 96, top: 22, bottom: 2 }, yAxis },
+  };
+}
+const brlCurto = (c) => brl(Math.round(c / 100) * 100).replace(/,00$/, '');
+
 /** Barras horizontais, uma cor só: o comprimento já mostra a grandeza. */
 function graficoCategorias(el, porCategoria, aoClicar) {
   const dados = [...porCategoria].reverse();
   const total = dados.reduce((s, d) => s + d.total, 0);
   const parte = (v) => (total ? `${((v / total) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '');
+  const lay = layoutBarras(el, dados.map((d) => d.nome),
+    (i, curto) => `${curto ? brlCurto(dados[i].total) : brl(dados[i].total)} · ${parte(dados[i].total)}`);
   const g = novoGrafico(el);
-  el.style.height = `${Math.max(220, dados.length * 34 + 40)}px`;
-  g.resize();
   g.setOption({
-    grid: { left: 8, right: 140, top: 8, bottom: 8, containLabel: true },
+    ...lay.opcoes,
     tooltip: { ...tooltipBase(), trigger: 'item', formatter: (p) => `${esc(p.name)}<br><b>${brl(p.value)}</b> · ${parte(p.value)} do total · ${dados[p.dataIndex].qtd} lançamentos` },
     xAxis: { type: 'value', ...eixoBase(), axisLabel: { show: false }, splitLine: { show: false } },
-    yAxis: { type: 'category', data: dados.map((d) => d.nome), ...eixoBase() },
     series: [{
-      type: 'bar', barMaxWidth: 22, cursor: 'pointer',
+      type: 'bar', barMaxWidth: lay.barMaxWidth, cursor: 'pointer',
       data: dados.map((d) => ({
         value: d.total,
         itemStyle: { color: d.id == null ? css('--series-4') : css('--series-1'), borderRadius: [0, 4, 4, 0] },
       })),
-      label: { show: true, position: 'right', color: css('--text-2'), formatter: (p) => `${brl(p.value)} · ${parte(p.value)}` },
+      label: lay.label,
     }],
   });
   g.on('click', (p) => aoClicar(dados[p.dataIndex]));
@@ -228,9 +253,11 @@ function graficoGrupos(el, porCategoria, aoClicar) {
   const cor = (c) => (c.id == null ? css('--series-4') : c.cor || css('--series-1'));
 
   // Série i = i-ésimo pedaço de cada barra (maior primeiro), assim o empilhamento segue a ordem de tamanho.
+  const lay = layoutBarras(el, grupos.map((x) => x.nome),
+    (i, curto) => `${curto ? brlCurto(grupos[i].total) : brl(grupos[i].total)} · ${pctDe(grupos[i].total, total)}`);
   const camadas = Math.max(0, ...grupos.map((g) => g.itens.length));
   const series = Array.from({ length: camadas }, (_, i) => ({
-    type: 'bar', stack: 'grupo', barMaxWidth: 22, cursor: 'pointer',
+    type: 'bar', stack: 'grupo', barMaxWidth: lay.barMaxWidth, cursor: 'pointer',
     data: grupos.map((g) => {
       const c = g.itens[i];
       if (!c) return null;
@@ -246,15 +273,12 @@ function graficoGrupos(el, porCategoria, aoClicar) {
   series.push({
     type: 'bar', stack: 'grupo', silent: true, itemStyle: { color: 'transparent' }, tooltip: { show: false },
     data: grupos.map(() => 0),
-    label: { show: true, position: 'right', color: css('--text-2'),
-      formatter: (p) => `${brl(grupos[p.dataIndex].total)} · ${pctDe(grupos[p.dataIndex].total, total)}` },
+    label: lay.label,
   });
 
   const g = novoGrafico(el);
-  el.style.height = `${Math.max(220, grupos.length * 34 + 40)}px`;
-  g.resize();
   g.setOption({
-    grid: { left: 8, right: 140, top: 8, bottom: 8, containLabel: true },
+    ...lay.opcoes,
     tooltip: {
       ...tooltipBase(), trigger: 'item',
       formatter: (p) => {
@@ -264,7 +288,6 @@ function graficoGrupos(el, porCategoria, aoClicar) {
       },
     },
     xAxis: { type: 'value', ...eixoBase(), axisLabel: { show: false }, splitLine: { show: false } },
-    yAxis: { type: 'category', data: grupos.map((x) => x.nome), ...eixoBase() },
     series,
   });
   g.on('click', (p) => p.data?.categoria && aoClicar(p.data.categoria));

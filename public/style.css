@@ -264,3 +264,21 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
 .seg button { border: 0; border-radius: 0; background: none; color: var(--text-2); padding: 4px 10px; font-size: .85rem; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* Celular: menos moldura, mais espaço para o conteúdo. */
+@media (max-width: 600px) {
+  main { padding: 12px 12px 40px; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .card { padding: 10px 12px; }
+  .card .rot { font-size: .78rem; }
+  .card .val { font-size: 1.2rem; }
+  .card .muted, .card a { font-size: .78rem; }
+  .painel { padding: 12px; }
+  .grade { gap: 8px; margin-bottom: 8px; }
+  .grafico { height: 280px; }
+  th, td { padding: 6px 8px; }
+  table { font-size: .88rem; }
+  input[type="search"] { min-width: 0; width: 100%; }
+  .filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .filtros select, .filtros input { width: 100%; }
+}
