@@ -1,6 +1,7 @@
 // Renda (salário, freela...) lançada à mão. Conta no mês da data de recebimento e é comparada
 // com o que saiu no mesmo período: gastos (mês da fatura/vencimento) e aportes (mês da anotação).
 import { totalGasto } from './consultas.js';
+import { evolucao } from './patrimonio.js';
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const REF = /^\d{4}-\d{2}$/;
@@ -91,6 +92,8 @@ export function repetirMesAnterior(db, referencia) {
 /**
  * Renda × saídas no período: gastos (como no resumo, sem filtro de banco/cartão) e investido
  * (aportes − resgates). `mesesSemRenda`: meses com fatura no período e nenhuma renda lançada.
+ * `rendimento`: o que os investimentos renderam (variação − aporte), só informativo; cada anotação
+ * conta no mês da sua data. null quando não há anotação com ganho no período.
  */
 export function balanco(db, { de, ate } = {}) {
   const r = periodo('data', { de, ate });
@@ -103,5 +106,8 @@ export function balanco(db, { de, ate } = {}) {
   const f = [de && 'referencia >= ?', ate && 'referencia <= ?'].filter(Boolean);
   const mesesSemRenda = db.prepare(`SELECT DISTINCT referencia FROM faturas ${f.length ? `WHERE ${f.join(' AND ')}` : ''}
     ORDER BY referencia`).all(...[de, ate].filter(Boolean)).map((x) => x.referencia).filter((ref) => !comRenda.has(ref));
-  return { renda, gastos, investido, sobra: renda - gastos - investido, mesesSemRenda };
+  const ganhos = evolucao(db).linhas.filter((l) => l.ganho != null
+    && (!de || l.data.slice(0, 7) >= de) && (!ate || l.data.slice(0, 7) <= ate));
+  const rendimento = ganhos.length ? ganhos.reduce((s, l) => s + l.ganho, 0) : null;
+  return { renda, gastos, investido, sobra: renda - gastos - investido, rendimento, mesesSemRenda };
 }

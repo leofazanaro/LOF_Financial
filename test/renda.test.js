@@ -48,7 +48,7 @@ test('balanço do mês: renda − gastos (cartão + contas) − aportes; descons
   definirDesconsiderada(db, [padaria.id], true);
 
   const b = balanco(db, { de: '2026-10', ate: '2026-10' });
-  assert.deepEqual(b, { renda: 500000, gastos: 10000 + 150000, investido: 93500, sobra: 500000 - 160000 - 93500, mesesSemRenda: [] });
+  assert.deepEqual(b, { renda: 500000, gastos: 10000 + 150000, investido: 93500, sobra: 500000 - 160000 - 93500, rendimento: null, mesesSemRenda: [] });
 });
 
 test('período com vários meses aponta meses sem renda; resgate reduz o investido', async () => {
@@ -64,6 +64,17 @@ test('período com vários meses aponta meses sem renda; resgate reduz o investi
   assert.equal(b.gastos, 12000 + 150000);
   assert.deepEqual(b.mesesSemRenda, ['2026-09']);
   assert.equal(balanco(db, { de: '2026-10', ate: '2026-10' }).investido, -30000);
+});
+
+test('rendimento do período: variação menos aporte das anotações no período', async () => {
+  const db = await banco();
+  const c = criarCarteira(db, { nome: 'Tesouro' });
+  salvarRegistro(db, '2026-08-31', { valores: { [c]: 100000 } });
+  salvarRegistro(db, '2026-09-30', { valores: { [c]: 151000 }, aporte: 50000 }); // rendeu 1.000
+  salvarRegistro(db, '2026-10-31', { valores: { [c]: 152500 } });                // rendeu 1.500
+  assert.equal(balanco(db, { de: '2026-09', ate: '2026-09' }).rendimento, 1000);
+  assert.equal(balanco(db, {}).rendimento, 2500);
+  assert.equal(balanco(db, { de: '2026-11', ate: '2026-11' }).rendimento, null);
 });
 
 test('repete a renda do mês anterior, ajustando o dia ao fim do mês', async () => {

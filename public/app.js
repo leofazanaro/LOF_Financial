@@ -488,7 +488,20 @@ function cardBalanco(b, filtros) {
       <li>${estourou ? `<span class="quadro excesso" aria-hidden="true"></span><b>${brl(saidas - b.renda)}</b> acima da renda`
         : `<span class="quadro seg-sobra" aria-hidden="true"></span>Sobra <b>${brl(b.renda - saidas)}</b> · ${parte(b.renda - saidas)}`}</li>
     </ul>
+    ${linhaRendimento(b)}
     ${semRenda}
+  </div>`;
+}
+
+/** Só informativo: quanto os investimentos renderam no período, comparado com a renda (não entra na sobra). */
+function linhaRendimento(b) {
+  if (b.rendimento == null) return '';
+  const largura = Math.min(Math.max(b.rendimento, 0) / b.renda, 1) * 100;
+  return `<div class="rendimento-renda">
+    <div class="barra-renda fina" role="img" aria-label="Rendimento de ${pct(b.rendimento / b.renda)} da renda">
+      <span class="seg-rendimento" style="width:${largura.toFixed(2)}%"></span></div>
+    <span class="legenda-renda"><span><span class="quadro seg-rendimento" aria-hidden="true"></span>Rendimento dos investimentos
+      <b>${brl(b.rendimento)}</b> · ${pct(b.rendimento / b.renda)} da renda <span class="muted">(não entra na conta acima)</span></span></span>
   </div>`;
 }
 

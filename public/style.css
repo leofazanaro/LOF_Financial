@@ -281,6 +281,10 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
 .legenda-renda { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: .9rem; color: var(--text-2); }
 .legenda-renda li { display: inline-flex; align-items: center; gap: 6px; }
 .legenda-renda b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.seg-rendimento { background: var(--series-3); }
+.rendimento-renda { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.barra-renda.fina { height: 8px; margin: 0 0 6px; }
+.rendimento-renda .quadro { margin-right: 6px; vertical-align: -1px; }
 .quadro { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
 .nota-renda { margin: 8px 0 0; }
 tr.mes-renda th { color: var(--text); font-size: .85rem; background: var(--bg); }
