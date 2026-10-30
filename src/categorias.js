@@ -74,15 +74,17 @@ export function buscarCategoria(db, nomeOuId) {
 
 const COR = /^#[0-9a-f]{6}$/i;
 
-function validarNome(db, nome, ignorarId = null) {
+function validarNome(db, nome, ignorarId = null, { tabela = 'categorias', rotulo = 'categoria', artigo = 'A' } = {}) {
   const limpo = nome?.trim();
-  if (!limpo) throw new Error('Informe o nome da categoria');
+  if (!limpo) throw new Error(`Informe o nome d${artigo.toLowerCase()} ${rotulo}`);
   if (limpo.length > 40) throw new Error('Nome muito longo (máx. 40 caracteres)');
-  const igual = db.prepare('SELECT id, nome FROM categorias').all()
+  const igual = db.prepare(`SELECT id, nome FROM ${tabela}`).all()
     .find((c) => c.id !== ignorarId && normalizar(c.nome) === normalizar(limpo));
-  if (igual) throw new Error(`A categoria "${igual.nome}" já existe`);
+  if (igual) throw new Error(`${artigo} ${rotulo} "${igual.nome}" já existe`);
   return limpo;
 }
+
+const GRUPO = { tabela: 'grupos', rotulo: 'grupo', artigo: 'O' };
 
 function validarCor(cor) {
   if (cor == null || cor === '') return null;
@@ -97,13 +99,41 @@ export function criarCategoria(db, nome, cor = null) {
   return Number(r.lastInsertRowid);
 }
 
-/** Renomeia e/ou troca a cor. Campos ausentes ficam como estão. */
-export function editarCategoria(db, id, { nome, cor } = {}) {
+/** Renomeia, troca a cor e/ou o grupo (null = sem grupo). Campos ausentes ficam como estão. */
+export function editarCategoria(db, id, { nome, cor, grupoId } = {}) {
   const atual = buscarCategoria(db, id);
   const novoNome = nome === undefined ? atual.nome : validarNome(db, nome, atual.id);
   const novaCor = cor === undefined ? atual.cor : validarCor(cor);
-  db.prepare('UPDATE categorias SET nome = ?, cor = ? WHERE id = ?').run(novoNome, novaCor, atual.id);
-  return { ...atual, nome: novoNome, cor: novaCor };
+  const novoGrupo = grupoId === undefined ? atual.grupo_id : grupoId == null ? null : buscarGrupo(db, grupoId).id;
+  db.prepare('UPDATE categorias SET nome = ?, cor = ?, grupo_id = ? WHERE id = ?').run(novoNome, novaCor, novoGrupo, atual.id);
+  return { ...atual, nome: novoNome, cor: novaCor, grupo_id: novoGrupo };
+}
+
+// Grupos juntam categorias afins no gráfico; apagar um grupo só solta as categorias dele.
+
+function buscarGrupo(db, id) {
+  const g = db.prepare('SELECT * FROM grupos WHERE id = ?').get(Number(id));
+  if (!g) throw new Error(`Grupo não encontrado: "${id}"`);
+  return g;
+}
+
+export function criarGrupo(db, nome) {
+  nome = validarNome(db, nome, null, GRUPO);
+  return Number(db.prepare('INSERT INTO grupos (nome) VALUES (?)').run(nome).lastInsertRowid);
+}
+
+export function renomearGrupo(db, id, nome) {
+  const g = buscarGrupo(db, id);
+  nome = validarNome(db, nome, g.id, GRUPO);
+  db.prepare('UPDATE grupos SET nome = ? WHERE id = ?').run(nome, g.id);
+  return { ...g, nome };
+}
+
+export function apagarGrupo(db, id) {
+  const g = buscarGrupo(db, id);
+  const categorias = db.prepare('SELECT count(*) AS n FROM categorias WHERE grupo_id = ?').get(g.id).n;
+  db.prepare('DELETE FROM grupos WHERE id = ?').run(g.id); // categorias: grupo_id vira NULL
+  return { categorias };
 }
 
 /**

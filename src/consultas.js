@@ -46,7 +46,8 @@ export function opcoesDeFiltro(db) {
     // Nome e cor de exibição de todos os bancos cadastrados (ordem alfabética do código = cor padrão estável).
     bancosInfo: db.prepare('SELECT codigo, nome, cor FROM bancos ORDER BY codigo').all(),
     referencias: db.prepare('SELECT DISTINCT referencia FROM faturas ORDER BY referencia').all().map((r) => r.referencia),
-    categorias: db.prepare('SELECT id, nome, cor FROM categorias ORDER BY nome').all(),
+    categorias: db.prepare('SELECT id, nome, cor, grupo_id FROM categorias ORDER BY nome').all(),
+    grupos: db.prepare('SELECT id, nome FROM grupos ORDER BY nome').all(),
     etiquetas: db.prepare('SELECT id, nome FROM etiquetas ORDER BY nome').all(),
   };
 }
@@ -64,8 +65,9 @@ export function resumo(db, filtros) {
     ${FROM} WHERE ${sql}`).get(...args);
 
   const porCategoria = db.prepare(`SELECT t.categoria_id AS id, coalesce(c.nome, 'Sem categoria') AS nome,
-      sum(t.valor_centavos) AS total, count(*) AS qtd
-    ${FROM} WHERE ${sql} GROUP BY t.categoria_id ORDER BY total DESC`).all(...args);
+      c.cor, c.grupo_id AS grupoId, g.nome AS grupo, sum(t.valor_centavos) AS total, count(*) AS qtd
+    ${FROM} LEFT JOIN grupos g ON g.id = c.grupo_id
+    WHERE ${sql} GROUP BY t.categoria_id ORDER BY total DESC`).all(...args);
 
   const porMesBanco = db.prepare(`SELECT f.referencia, t.banco, sum(t.valor_centavos) AS total
     ${FROM} WHERE ${sql} GROUP BY f.referencia, t.banco ORDER BY f.referencia, t.banco`).all(...args);
@@ -94,12 +96,18 @@ export function regras(db) {
 }
 
 export function categoriasComUso(db) {
-  return db.prepare(`SELECT c.id, c.nome, c.cor, count(t.id) AS qtd, coalesce(sum(t.valor_centavos), 0) AS total,
+  return db.prepare(`SELECT c.id, c.nome, c.cor, c.grupo_id AS grupoId, count(t.id) AS qtd, coalesce(sum(t.valor_centavos), 0) AS total,
       (SELECT count(*) FROM regras r WHERE r.categoria_id = c.id) AS regras,
       (SELECT limite_centavos FROM orcamentos o WHERE o.categoria_id = c.id) AS limite,
       (SELECT max(t2.data) FROM transacoes t2 WHERE t2.categoria_id = c.id) AS ultimo
     FROM categorias c LEFT JOIN transacoes t ON t.categoria_id = c.id AND t.desconsiderada = 0
     GROUP BY c.id ORDER BY c.nome`).all();
+}
+
+export function gruposComUso(db) {
+  return db.prepare(`SELECT g.id, g.nome, count(c.id) AS categorias
+    FROM grupos g LEFT JOIN categorias c ON c.grupo_id = g.id
+    GROUP BY g.id ORDER BY g.nome`).all();
 }
 
 export function etiquetas(db) {

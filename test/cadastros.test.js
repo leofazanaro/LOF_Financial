@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db/index.js';
 import { importar } from '../src/importacao.js';
-import { apagarCategoria, buscarCategoria, criarCategoria, criarRegra, definirCategoria, editarCategoria } from '../src/categorias.js';
+import {
+  apagarCategoria, apagarGrupo, buscarCategoria, criarCategoria, criarGrupo, criarRegra, definirCategoria, editarCategoria, renomearGrupo,
+} from '../src/categorias.js';
+import { resumo } from '../src/consultas.js';
 import { definirOrcamento } from '../src/analises.js';
 import { apagarBanco, criarBanco, definirApelidoCartao, editarBanco, listarBancos } from '../src/bancos.js';
 
@@ -79,4 +82,27 @@ test('bancos: cadastro automático na importação, edição, validação e apel
   apagarBanco(db, codigo);
   assert.ok(!listarBancos(db).some((x) => x.codigo === codigo));
   assert.throws(() => definirApelidoCartao(db, 'nubank', '9999', 'x'), /não encontrado/);
+});
+
+test('grupos: criar, renomear, agrupar categorias e apagar', async () => {
+  const db = await banco();
+  const alim = criarGrupo(db, 'Alimentação');
+  assert.throws(() => criarGrupo(db, ' alimentacao '), /O grupo "Alimentação" já existe/);
+  assert.throws(() => criarGrupo(db, ' '), /Informe o nome do grupo/);
+  renomearGrupo(db, alim, 'Comida');
+
+  const mercado = buscarCategoria(db, 'Mercado').id;
+  editarCategoria(db, mercado, { grupoId: alim });
+  assert.equal(buscarCategoria(db, mercado).grupo_id, alim);
+  editarCategoria(db, mercado, { nome: 'Supermercado' }); // grupo fica
+  assert.equal(buscarCategoria(db, mercado).grupo_id, alim);
+  assert.throws(() => editarCategoria(db, mercado, { grupoId: 999 }), /Grupo não encontrado/);
+
+  const linha = resumo(db, {}).porCategoria.find((c) => c.id === mercado);
+  assert.equal(linha.grupoId, alim);
+  assert.equal(linha.grupo, 'Comida');
+
+  assert.deepEqual(apagarGrupo(db, alim), { categorias: 1 });
+  assert.equal(buscarCategoria(db, mercado).grupo_id, null);
+  editarCategoria(db, mercado, { grupoId: null });
 });

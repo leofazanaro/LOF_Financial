@@ -8,7 +8,7 @@ import { DEFAULT_DB_PATH, openDb } from './db/index.js';
 import { importar } from './importacao.js';
 import * as consultas from './consultas.js';
 import {
-  apagarCategoria, criarCategoria, criarRegra, definirCategoria, editarCategoria, removerRegra, voltarParaAutomatico,
+  apagarCategoria, apagarGrupo, criarCategoria, criarGrupo, criarRegra, renomearGrupo, definirCategoria, editarCategoria, removerRegra, voltarParaAutomatico,
 } from './categorias.js';
 import { apagarBanco, criarBanco, definirApelidoCartao, editarBanco, listarBancos } from './bancos.js';
 import * as patrimonio from './patrimonio.js';
@@ -263,11 +263,18 @@ export function criarApp({
     schema: { body: { type: 'object', properties: { nome: { type: 'string', minLength: 1 }, cor: COR }, required: ['nome'] } },
   }, async (req) => ({ id: criarCategoria(db, req.body.nome, req.body.cor) }));
   app.put('/api/categorias/:id', {
-    schema: { ...paramId, body: { type: 'object', properties: { nome: { type: 'string', minLength: 1 }, cor: COR } } },
+    schema: { ...paramId, body: { type: 'object', properties: { nome: { type: 'string', minLength: 1 }, cor: COR, grupoId: { type: ['integer', 'null'] } } } },
   }, async (req) => editarCategoria(db, req.params.id, req.body));
   app.delete('/api/categorias/:id', {
     schema: { ...paramId, querystring: { type: 'object', properties: { moverPara: { type: 'integer' } } } },
   }, async (req) => apagarCategoria(db, req.params.id, { moverPara: req.query.moverPara ?? null }));
+
+  // Grupos de categorias
+  const corpoGrupo = { body: { type: 'object', properties: { nome: { type: 'string', minLength: 1 } }, required: ['nome'] } };
+  app.get('/api/grupos', async () => consultas.gruposComUso(db));
+  app.post('/api/grupos', { schema: corpoGrupo }, async (req) => ({ id: criarGrupo(db, req.body.nome) }));
+  app.put('/api/grupos/:id', { schema: { ...paramId, ...corpoGrupo } }, async (req) => renomearGrupo(db, req.params.id, req.body.nome));
+  app.delete('/api/grupos/:id', { schema: paramId }, async (req) => apagarGrupo(db, req.params.id));
 
   // Bancos
   const DADOS_BANCO = {

@@ -256,3 +256,11 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
 .tabela-patrimonio th:first-child, .tabela-patrimonio td:first-child {
   position: sticky; left: 0; z-index: 1; background: var(--surface); white-space: nowrap;
 }
+
+/* Título de painel com controles à direita, e seletor segmentado (ex.: grupo | categoria). */
+.titulo-acoes { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.titulo-acoes h2 { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: none; color: var(--text-2); padding: 4px 10px; font-size: .85rem; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }

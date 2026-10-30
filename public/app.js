@@ -206,6 +206,68 @@ function graficoCategorias(el, porCategoria, aoClicar) {
   g.on('click', (p) => aoClicar(dados[p.dataIndex]));
 }
 
+/**
+ * Uma barra por grupo, empilhada pelas categorias que o compõem (cada pedaço na cor da categoria).
+ * Categoria sem grupo vira uma barra sozinha.
+ */
+function graficoGrupos(el, porCategoria, aoClicar) {
+  const mapa = new Map();
+  for (const c of porCategoria) {
+    const chave = c.grupoId != null ? `g:${c.grupoId}` : `c:${c.id ?? 'sem'}`;
+    if (!mapa.has(chave)) mapa.set(chave, { nome: c.grupo ?? c.nome, total: 0, itens: [] });
+    const g = mapa.get(chave);
+    g.total += c.total;
+    g.itens.push(c);
+  }
+  const grupos = [...mapa.values()].sort((a, b) => a.total - b.total); // menor embaixo no eixo invertido
+  grupos.forEach((g) => g.itens.sort((a, b) => b.total - a.total));
+  const total = grupos.reduce((s, g) => s + g.total, 0);
+  const pctDe = (v, de) => (de ? `${((v / de) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '');
+  const cor = (c) => (c.id == null ? css('--series-4') : c.cor || css('--series-1'));
+
+  // Série i = i-ésimo pedaço de cada barra (maior primeiro), assim o empilhamento segue a ordem de tamanho.
+  const camadas = Math.max(0, ...grupos.map((g) => g.itens.length));
+  const series = Array.from({ length: camadas }, (_, i) => ({
+    type: 'bar', stack: 'grupo', barMaxWidth: 22, cursor: 'pointer',
+    data: grupos.map((g) => {
+      const c = g.itens[i];
+      if (!c) return null;
+      const ultimo = i === g.itens.length - 1;
+      return {
+        value: c.total, categoria: c, grupo: g,
+        itemStyle: { color: cor(c), borderColor: css('--surface'), borderWidth: g.itens.length > 1 ? 1 : 0,
+          borderRadius: ultimo ? [0, 4, 4, 0] : 0 },
+      };
+    }),
+  }));
+  // Pedaço vazio no fim da pilha só para o rótulo com o total do grupo.
+  series.push({
+    type: 'bar', stack: 'grupo', silent: true, itemStyle: { color: 'transparent' }, tooltip: { show: false },
+    data: grupos.map(() => 0),
+    label: { show: true, position: 'right', color: css('--text-2'),
+      formatter: (p) => `${brl(grupos[p.dataIndex].total)} · ${pctDe(grupos[p.dataIndex].total, total)}` },
+  });
+
+  const g = novoGrafico(el);
+  el.style.height = `${Math.max(220, grupos.length * 34 + 40)}px`;
+  g.resize();
+  g.setOption({
+    grid: { left: 8, right: 140, top: 8, bottom: 8, containLabel: true },
+    tooltip: {
+      ...tooltipBase(), trigger: 'item',
+      formatter: (p) => {
+        const { categoria: c, grupo } = p.data;
+        const dentro = grupo.itens.length > 1 ? ` · ${pctDe(c.total, grupo.total)} de ${esc(grupo.nome)}` : '';
+        return `${p.marker}${esc(c.nome)}<br><b>${brl(c.total)}</b>${dentro} · ${pctDe(c.total, total)} do total · ${c.qtd} lançamentos`;
+      },
+    },
+    xAxis: { type: 'value', ...eixoBase(), axisLabel: { show: false }, splitLine: { show: false } },
+    yAxis: { type: 'category', data: grupos.map((x) => x.nome), ...eixoBase() },
+    series,
+  });
+  g.on('click', (p) => p.data?.categoria && aoClicar(p.data.categoria));
+}
+
 /** Barras empilhadas por banco, um mês por coluna. A cor do banco é fixa (ordem alfabética). */
 function graficoMeses(el, porMesBanco) {
   const refs = [...new Set(porMesBanco.map((r) => r.referencia))].sort();
@@ -302,8 +364,12 @@ async function telaVisaoGeral({ filtros }) {
       </div>
     </div>
     <div class="grade">
-      <section class="painel"><h2>Gasto por categoria</h2><div class="grafico" id="g-cat"></div>
-        <p class="muted">Clique numa barra para ver a categoria.</p></section>
+      <section class="painel"><div class="titulo-acoes"><h2>Gasto por ${visaoCategorias() === 'grupo' ? 'grupo' : 'categoria'}</h2>
+          <div class="seg" role="group" aria-label="Agrupar gasto">
+            <button data-visao="grupo" aria-pressed="${visaoCategorias() === 'grupo'}">Grupo</button>
+            <button data-visao="categoria" aria-pressed="${visaoCategorias() === 'categoria'}">Categoria</button></div></div>
+        <div class="grafico" id="g-cat"></div>
+        <p class="muted">Clique numa barra para ver a categoria.${opcoes.grupos.length ? '' : ' <a href="#/categorias">Agrupe categorias</a> para somá-las numa barra só.'}</p></section>
       <section class="painel"><h2>Gasto por mês</h2><div class="grafico" id="g-mes"></div></section>
     </div>
     <div class="grade">
@@ -327,9 +393,26 @@ async function telaVisaoGeral({ filtros }) {
     </div>
     <section class="painel"><h2>Maiores lançamentos</h2>${tabelaSimples(r.maiores)}</section>`;
   ligarFiltros('');
-  graficoCategorias(document.getElementById('g-cat'), r.porCategoria,
+  const elCat = document.getElementById('g-cat');
+  const desenharCategorias = () => (visaoCategorias() === 'grupo' ? graficoGrupos : graficoCategorias)(elCat, r.porCategoria,
     (d) => irPara(`categoria/${d.id ?? 'sem'}`, filtros));
+  desenharCategorias();
+  $app.querySelectorAll('[data-visao]').forEach((b) => b.addEventListener('click', () => {
+    visaoCategorias(b.dataset.visao);
+    $app.querySelectorAll('[data-visao]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    elCat.closest('.painel').querySelector('h2').textContent = `Gasto por ${b.dataset.visao}`;
+    const antigo = echarts.getInstanceByDom(elCat);
+    graficos = graficos.filter((x) => x !== antigo);
+    antigo?.dispose();
+    desenharCategorias();
+  }));
   graficoMeses(document.getElementById('g-mes'), r.porMesBanco);
+}
+
+/** Visão do gráfico de gasto no painel ('grupo' ou 'categoria'); lembrada só neste navegador. */
+function visaoCategorias(nova) {
+  if (nova) { try { localStorage.setItem('visaoCategorias', nova); } catch { /* sem armazenamento */ } return nova; }
+  try { return localStorage.getItem('visaoCategorias') === 'categoria' ? 'categoria' : 'grupo'; } catch { return 'grupo'; }
 }
 
 // ---------- categoria ----------
@@ -1064,6 +1147,7 @@ async function telaPatrimonio({ filtros }) {
         <tbody>${carteiras.map((c, i) => `<tr data-carteira="${c.id}" data-nome="${esc(c.nome)}">
           <td><input type="color" data-cor value="${esc(corHex(corCarteira(c, i)))}" aria-label="Cor de ${esc(c.nome)}"></td>
           <td><input class="nome-inline" data-nome-input value="${esc(c.nome)}" maxlength="40" aria-label="Renomear ${esc(c.nome)}"></td>
+        <td><select data-grupo-sel aria-label="Grupo de ${esc(c.nome)}">${optsGrupo(c.grupoId)}</select></td>
           <td><label><input type="checkbox" data-ativa ${c.ativa ? 'checked' : ''}> ativa</label></td>
           <td class="num">${ultima?.valores[c.id] != null ? brl(ultima.valores[c.id]) : '—'}</td>
           <td><button class="link perigo" data-apagar-carteira>apagar</button></td></tr>`).join('')}</tbody></table></div>
@@ -1409,7 +1493,9 @@ function aoEditar(input, salvar) {
 }
 
 async function telaCategorias() {
-  const cats = await api('/api/categorias');
+  const [cats, grupos] = await Promise.all([api('/api/categorias'), api('/api/grupos')]);
+  const optsGrupo = (atual) => `<option value="">— sem grupo —</option>` +
+    grupos.map((g) => `<option value="${g.id}" ${g.id === atual ? 'selected' : ''}>${esc(g.nome)}</option>`).join('');
   const total = cats.reduce((s, c) => s + c.total, 0);
   $app.innerHTML = `
     ${abasConfig('categorias')}
@@ -1422,12 +1508,26 @@ async function telaCategorias() {
         <button class="primario">Criar categoria</button>
       </form>
     </section>
+    <section class="painel bloco"><h2>Grupos</h2>
+      <p class="muted">Juntam categorias afins numa barra só no gráfico do painel (ex.: “Alimentação” = Restaurante + Marmita). Escolha o grupo de cada categoria na tabela abaixo.</p>
+      <form class="inline" id="form-grupo">
+        <input name="nome" required maxlength="40" placeholder="ex.: Alimentação" aria-label="Nome do novo grupo">
+        <button class="primario">Criar grupo</button>
+      </form>
+      ${grupos.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nome</th><th class="num">Categorias</th><th></th></tr></thead>
+        <tbody>${grupos.map((g) => `<tr data-grupo="${g.id}" data-nome="${esc(g.nome)}">
+          <td><input class="nome-inline" data-nome-grupo value="${esc(g.nome)}" maxlength="40" aria-label="Renomear ${esc(g.nome)}"></td>
+          <td class="num">${g.categorias}</td>
+          <td class="acoes"><button class="link perigo" data-apagar-grupo>apagar</button></td>
+        </tr>`).join('')}</tbody></table></div>` : ''}
+    </section>
     <section class="painel"><div class="tabela-wrap"><table>
-      <thead><tr><th>Cor</th><th>Nome</th><th class="num">Lançamentos</th><th class="num">Total</th><th class="num">% do total</th>
+      <thead><tr><th>Cor</th><th>Nome</th><th>Grupo</th><th class="num">Lançamentos</th><th class="num">Total</th><th class="num">% do total</th>
         <th class="num">Regras</th><th class="num">Limite mensal</th><th>Último</th><th></th></tr></thead>
       <tbody>${cats.map((c) => `<tr data-id="${c.id}" data-nome="${esc(c.nome)}" data-qtd="${c.qtd}" data-regras="${c.regras}">
         <td><input type="color" data-cor value="${esc(c.cor || '#888888')}" aria-label="Cor de ${esc(c.nome)}"></td>
         <td><input class="nome-inline" data-nome-input value="${esc(c.nome)}" maxlength="40" aria-label="Renomear ${esc(c.nome)}"></td>
+        <td><select data-grupo-sel aria-label="Grupo de ${esc(c.nome)}">${optsGrupo(c.grupoId)}</select></td>
         <td class="num">${c.qtd}</td><td class="num">${brl(c.total)}</td>
         <td class="num">${total ? pct(c.total / total) : '—'}</td>
         <td class="num">${c.regras}</td>
@@ -1450,9 +1550,27 @@ async function telaCategorias() {
     const d = Object.fromEntries(new FormData(e.target));
     acao(() => api('/api/categorias', { method: 'POST', body: { nome: d.nome, cor: d.cor } }), `Categoria “${d.nome.trim()}” criada`);
   });
+  document.getElementById('form-grupo').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const nome = new FormData(e.target).get('nome');
+    acao(() => api('/api/grupos', { method: 'POST', body: { nome } }), `Grupo “${nome.trim()}” criado`);
+  });
+  $app.querySelectorAll('tr[data-grupo]').forEach((tr) => {
+    const id = Number(tr.dataset.grupo);
+    aoEditar(tr.querySelector('[data-nome-grupo]'), (nome) =>
+      acao(() => api(`/api/grupos/${id}`, { method: 'PUT', body: { nome } }), `Grupo renomeado para “${nome.trim()}”`));
+    tr.querySelector('[data-apagar-grupo]').addEventListener('click', () => {
+      if (confirm(`Apagar o grupo “${tr.dataset.nome}”? As categorias dele ficam sem grupo.`)) {
+        acao(() => api(`/api/grupos/${id}`, { method: 'DELETE' }), 'Grupo apagado');
+      }
+    });
+  });
   const dlg = document.getElementById('dlg-apagar');
   $app.querySelectorAll('tr[data-id]').forEach((tr) => {
     const id = Number(tr.dataset.id);
+    tr.querySelector('[data-grupo-sel]').addEventListener('change', (e) =>
+      acao(() => api(`/api/categorias/${id}`, { method: 'PUT', body: { grupoId: e.target.value ? Number(e.target.value) : null } }),
+        e.target.value ? `Categoria colocada em “${e.target.selectedOptions[0].text}”` : 'Categoria sem grupo'));
     tr.querySelector('[data-cor]').addEventListener('change', (e) =>
       acao(() => api(`/api/categorias/${id}`, { method: 'PUT', body: { cor: e.target.value } }), 'Cor salva'));
     aoEditar(tr.querySelector('[data-nome-input]'), (nome) =>
