@@ -133,7 +133,8 @@ function barraFiltros(filtros, { periodo = true, bancos = true, categoria = fals
 
 /**
  * Atalho de mês: um clique filtra só aquele mês da fatura (de = até = mês).
- * "Todos" limpa o período; as setas andam um mês para trás/frente.
+ * "Todos" limpa o período. Os meses vêm do mais recente para o mais antigo, então a seta da
+ * esquerda vai para o mês seguinte e a da direita para o anterior (andando junto com a lista).
  */
 function seletorMes(filtros) {
   const refs = opcoes.referencias;
@@ -144,18 +145,18 @@ function seletorMes(filtros) {
   const anterior = atual ? refs[i - 1] : refs.at(-1);
   const proximo = atual ? refs[i + 1] : null;
   let ano = null;
-  const chips = refs.map((r) => {
+  const chips = [...refs].reverse().map((r) => {
     const sep = r.slice(0, 4) !== ano ? `<span class="meses-ano">${(ano = r.slice(0, 4))}</span>` : '';
     return `${sep}<button type="button" class="chip-mes ${r === atual ? 'ativo' : ''}" data-mes="${r}"
       aria-pressed="${r === atual}" title="${mes(r)}">${MESES[Number(r.slice(5, 7)) - 1]}</button>`;
   }).join('');
   return `<div class="meses" data-meses role="group" aria-label="Filtrar por mês da fatura">
-    <button type="button" class="chip-mes seta" data-mes="${anterior ?? ''}" ${anterior ? '' : 'disabled'} aria-label="Mês anterior">‹</button>
+    <button type="button" class="chip-mes seta" data-mes="${proximo ?? ''}" ${proximo ? '' : 'disabled'} aria-label="Próximo mês">‹</button>
     <div class="meses-lista">
       <button type="button" class="chip-mes ${semPeriodo ? 'ativo' : ''}" data-mes="todos" aria-pressed="${semPeriodo}">Todos</button>
       ${chips}
     </div>
-    <button type="button" class="chip-mes seta" data-mes="${proximo ?? ''}" ${proximo ? '' : 'disabled'} aria-label="Próximo mês">›</button>
+    <button type="button" class="chip-mes seta" data-mes="${anterior ?? ''}" ${anterior ? '' : 'disabled'} aria-label="Mês anterior">›</button>
   </div>`;
 }
 
@@ -1976,4 +1977,17 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', marcarTema
 marcarTema();
 
 addEventListener('hashchange', () => { scrollTo(0, 0); render(); });
-addEventListener('DOMContentLoaded', render);
+// Ao abrir o painel, as telas com filtro de período começam no último mês (não em "Todos").
+const ROTAS_COM_PERIODO = ['', 'categoria', 'renda', 'transacoes', 'desconsiderados'];
+addEventListener('DOMContentLoaded', async () => {
+  const { rota } = rotaAtual();
+  if (!location.hash.includes('?') && ROTAS_COM_PERIODO.includes(rota)) {
+    try {
+      await carregarOpcoes();
+      const ultimo = opcoes.referencias.at(-1);
+      const caminho = location.hash.replace(/^#\/?/, '');
+      if (ultimo) history.replaceState(null, '', `#/${caminho}?${qs({ de: ultimo, ate: ultimo })}`);
+    } catch { /* sem opções: abre sem filtro */ }
+  }
+  render();
+});
