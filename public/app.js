@@ -21,6 +21,21 @@ function lerValor(txt) {
   return Math.round(n * 100);
 }
 
+/**
+ * Campos de dinheiro (input[data-moeda]) se formatam enquanto se digita, como nos apps de banco:
+ * só os dígitos contam e as duas últimas casas são os centavos ("1" → 0,01; "123456" → 1.234,56).
+ * Com data-moeda="sinal" o valor pode ser negativo: cada "-" digitado inverte o sinal, "+" tira.
+ * Captura: formata antes dos outros ouvintes de "input" (ex.: total ao vivo do patrimônio).
+ */
+function mascararMoeda(inp) {
+  const v = inp.value;
+  const negativo = inp.dataset.moeda === 'sinal' && !v.includes('+') && (v.match(/-|−/g)?.length ?? 0) % 2 === 1;
+  const digitos = v.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 13);
+  inp.value = (negativo ? '-' : '') + (digitos ? (Number(digitos) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+}
+document.addEventListener('input', (e) => { if (e.target.matches?.('input[data-moeda]')) mascararMoeda(e.target); }, true);
+
 // Cada render tem um número; uma leitura (GET) iniciada por um render antigo é descartada,
 // para que uma tela lenta não seja desenhada por cima da tela que o usuário abriu depois.
 let renderSeq = 0;
@@ -564,7 +579,7 @@ function formRenda(l) {
   return `<h2>${l.id ? 'Editar renda' : 'Nova renda'}</h2>
     <form id="form-renda" class="campos">
       <label class="largo">Descrição<input name="descricao" required maxlength="120" value="${esc(l.descricao ?? '')}" placeholder="ex.: Salário, Freela"></label>
-      <label>Valor (R$)<input name="valor" required inputmode="decimal" value="${reaisCampo(l.valor_centavos)}" placeholder="ex.: 5.000,00"></label>
+      <label>Valor (R$)<input name="valor" required data-moeda inputmode="numeric" value="${reaisCampo(l.valor_centavos)}" placeholder="ex.: 5.000,00"></label>
       <label>Recebido em<input type="date" name="data" required value="${l.data ?? hoje}"></label>
       <div class="barra-acoes largo"><button class="primario">${l.id ? 'Salvar' : 'Lançar renda'}</button>
         <button type="button" class="link" id="cancelar-renda">cancelar</button></div>
@@ -605,7 +620,7 @@ function formConta(t) {
   return `<h2>${t.id ? 'Editar conta' : 'Nova conta'}</h2>
     <form id="form-conta" class="campos">
       <label class="largo">Descrição<input name="descricao" required maxlength="120" value="${esc(t.descricao ?? '')}" placeholder="ex.: Aluguel, Conta de luz"></label>
-      <label>Valor (R$)<input name="valor" required inputmode="decimal" value="${reaisCampo(t.valor_centavos)}" placeholder="ex.: 1.500,00"></label>
+      <label>Valor (R$)<input name="valor" required data-moeda inputmode="numeric" value="${reaisCampo(t.valor_centavos)}" placeholder="ex.: 1.500,00"></label>
       <label>Vencimento<input type="date" name="data" required value="${t.data ?? hoje}"></label>
       <label>Categoria<select name="categoria"><option value="">automática (pelas regras)</option>
         ${opcoes.categorias.map((c) => `<option value="${c.id}" ${t.categoria_origem === 'manual' && c.id === t.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></label>
@@ -994,7 +1009,7 @@ async function telaOrcamento({ filtros }) {
       <tbody>${linhas.map((i) => `<tr data-cat="${i.id}">
         <td><a href="#/categoria/${i.id}?${qs({ de: orc.referencia, ate: orc.referencia })}">${esc(i.nome)}</a></td>
         <td class="num">${brl(i.gasto)}</td>
-        <td><input class="limite" inputmode="decimal" placeholder="sem limite" aria-label="Limite de ${esc(i.nome)}"
+        <td><input class="limite" data-moeda inputmode="numeric" placeholder="sem limite" aria-label="Limite de ${esc(i.nome)}"
           value="${i.limite ? (i.limite / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}"></td>
         <td class="uso">${i.limite ? `${barraProgresso(i)}<span class="muted">${pct(i.pct)} · ${i.disponivel >= 0 ? `sobram ${brl(i.disponivel)}` : `passou ${brl(-i.disponivel)}`}</span>` : ''}</td>
         <td>${seloStatus(i.status)}</td></tr>`).join('')}</tbody></table></div></section>`;
@@ -1197,10 +1212,10 @@ async function telaPatrimonio({ filtros }) {
       ${ativas.length ? `<form id="form-patrimonio" class="campos">
         <label>Data<input type="date" name="data" required value="${editando?.data ?? hoje}" ${editando ? 'readonly' : ''}></label>
         ${ativas.map((c) => `<label>${bolinha(corCarteira(c, carteiras.indexOf(c)))} ${esc(c.nome)} (R$)
-          <input name="c${c.id}" data-carteira-id="${c.id}" inputmode="decimal" value="${reaisCampo(editando?.valores[c.id])}"
+          <input name="c${c.id}" data-carteira-id="${c.id}" data-moeda inputmode="numeric" value="${reaisCampo(editando?.valores[c.id])}"
             placeholder="${ultima?.valores[c.id] != null ? `último: ${reaisCampo(ultima.valores[c.id])}` : '0,00'}"></label>`).join('')}
-        <label>Aporte do período (R$)<input name="aporte" inputmode="decimal" value="${editando ? reaisCampo(editando.aportado) : ''}"
-          placeholder="0,00 (resgate: negativo)"></label>
+        <label>Aporte do período (R$)<input name="aporte" data-moeda="sinal" inputmode="decimal" value="${editando ? reaisCampo(editando.aportado) : ''}"
+          placeholder="0,00 (resgate: digite −)"></label>
         <p class="largo" id="total-ao-vivo" aria-live="polite"></p>
         <div class="barra-acoes largo"><button class="primario">${editando ? 'Salvar alterações' : 'Salvar anotação'}</button>
           ${editando ? '<a href="#/patrimonio">cancelar edição</a>' : `${ultima ? '<button type="button" class="link" id="copiar-ultimos">copiar últimos valores</button>' : ''}
@@ -1252,9 +1267,9 @@ async function telaPatrimonio({ filtros }) {
           <button class="link perigo" id="remover-objetivo">remover</button></div>`
       : `<form id="form-objetivo" class="campos">
           <label>Nome (opcional)<input name="nome" maxlength="60" value="${esc(objetivo?.nome ?? '')}" placeholder="ex.: Independência financeira"></label>
-          <label>Valor do objetivo (R$)<input name="valor" required inputmode="decimal" value="${objetivo ? reaisCampo(objetivo.valor) : ''}" placeholder="ex.: 250.000,00"></label>
+          <label>Valor do objetivo (R$)<input name="valor" required data-moeda inputmode="numeric" value="${objetivo ? reaisCampo(objetivo.valor) : ''}" placeholder="ex.: 250.000,00"></label>
           <label>Até quando (opcional)<input type="date" name="dataAlvo" value="${objetivo?.dataAlvo ?? ''}"></label>
-          <label>Aporte desejado por mês (R$, opcional)<input name="aporteDesejado" inputmode="decimal" value="${objetivo?.aporteDesejado != null ? reaisCampo(objetivo.aporteDesejado) : ''}" placeholder="ex.: 5.000,00"></label>
+          <label>Aporte desejado por mês (R$, opcional)<input name="aporteDesejado" data-moeda inputmode="numeric" value="${objetivo?.aporteDesejado != null ? reaisCampo(objetivo.aporteDesejado) : ''}" placeholder="ex.: 5.000,00"></label>
           <div class="barra-acoes largo"><button class="primario">Salvar objetivo</button>
             ${objetivo ? '<a href="#/patrimonio">cancelar</a>' : '<span class="muted">O objetivo aparece como uma linha no gráfico, com a previsão de quando você chega lá.</span>'}</div>
         </form>`}
@@ -1290,7 +1305,6 @@ async function telaPatrimonio({ filtros }) {
         <tbody>${carteiras.map((c, i) => `<tr data-carteira="${c.id}" data-nome="${esc(c.nome)}">
           <td><input type="color" data-cor value="${esc(corHex(corCarteira(c, i)))}" aria-label="Cor de ${esc(c.nome)}"></td>
           <td><input class="nome-inline" data-nome-input value="${esc(c.nome)}" maxlength="40" aria-label="Renomear ${esc(c.nome)}"></td>
-        <td><select data-grupo-sel aria-label="Grupo de ${esc(c.nome)}">${optsGrupo(c.grupoId)}</select></td>
           <td><label><input type="checkbox" data-ativa ${c.ativa ? 'checked' : ''}> ativa</label></td>
           <td class="num">${ultima?.valores[c.id] != null ? brl(ultima.valores[c.id]) : '—'}</td>
           <td><button class="link perigo" data-apagar-carteira>apagar</button></td></tr>`).join('')}</tbody></table></div>
@@ -1758,7 +1772,7 @@ async function telaBancos() {
             <label>Cor<input type="color" name="cor" value="${esc(b.cor || corHex(corBanco(b.codigo)))}"></label>
             <label>Dia de fechamento<input name="diaFechamento" type="number" min="1" max="31" value="${b.dia_fechamento ?? ''}" placeholder="—"></label>
             <label>Dia de vencimento<input name="diaVencimento" type="number" min="1" max="31" value="${b.dia_vencimento ?? ''}" placeholder="—"></label>
-            <label>Limite do cartão (R$)<input name="limite" inputmode="decimal" value="${reais(b.limite_centavos)}" placeholder="—"></label>
+            <label>Limite do cartão (R$)<input name="limite" data-moeda inputmode="numeric" value="${reais(b.limite_centavos)}" placeholder="—"></label>
             <label class="largo">Observação<input name="observacao" maxlength="200" value="${esc(b.observacao ?? '')}" placeholder="opcional"></label>
           </div>
           <dl class="numeros">
