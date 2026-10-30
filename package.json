@@ -12,6 +12,7 @@
     "cat": "node scripts/categorias.js",
     "reconstruir": "node scripts/reconstruir-patrimonio.js",
     "contas": "node scripts/importar-contas.js",
+    "demo": "node scripts/demo.js",
     "test": "node --test"
   },
   "dependencies": {
