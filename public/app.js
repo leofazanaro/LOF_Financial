@@ -179,6 +179,8 @@ const eixoBase = () => ({
 });
 const tooltipBase = () => ({
   backgroundColor: css('--surface'), borderColor: css('--border'), textStyle: { color: css('--text') },
+  // Fica dentro do gráfico (senão corta na borda da tela) e quebra linha se não couber.
+  confine: true, extraCssText: 'max-width: 100%; white-space: normal;',
 });
 
 /** Barras horizontais, uma cor só: o comprimento já mostra a grandeza. */
