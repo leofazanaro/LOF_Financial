@@ -265,6 +265,26 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
+/* Renda × gastos e investimentos: a trilha é a renda; o que não foi preenchido é a sobra. */
+.card.balanco { grid-column: 1 / -1; }
+.balanco-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.balanco-topo a { font-size: .85rem; }
+.card.balanco .val .muted { font-size: .85rem; font-weight: 400; }
+.barra-renda { position: relative; display: flex; height: 14px; margin: 8px 0 10px; border-radius: 99px; overflow: hidden; background: var(--grid); }
+/* Saídas acima da renda: a barra passa a medir as saídas e o trecho além da renda fica listrado em vermelho. */
+.excesso { background: repeating-linear-gradient(-45deg, var(--critical) 0 4px, transparent 4px 8px); }
+.barra-renda .excesso { position: absolute; top: 0; bottom: 0; right: 0; border-left: 2px solid var(--text); }
+.barra-renda span + span { border-left: 2px solid var(--surface); }
+.seg-gasto { background: var(--series-1); }
+.seg-investido { background: var(--good); }
+.seg-sobra { background: var(--grid); border: 1px solid var(--border); }
+.legenda-renda { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: .9rem; color: var(--text-2); }
+.legenda-renda li { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-renda b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.quadro { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.nota-renda { margin: 8px 0 0; }
+tr.mes-renda th { color: var(--text); font-size: .85rem; background: var(--bg); }
+
 /* Celular: menos moldura, mais espaço para o conteúdo. */
 @media (max-width: 600px) {
   main { padding: 12px 12px 40px; }
@@ -273,6 +293,7 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
   .card .rot { font-size: .78rem; }
   .card .val { font-size: 1.2rem; }
   .card .muted, .card a { font-size: .78rem; }
+  .legenda-renda { flex-direction: column; font-size: .85rem; }
   .painel { padding: 12px; }
   .grade { gap: 8px; margin-bottom: 8px; }
   .grafico { height: 280px; }
@@ -281,4 +302,5 @@ details.detalhes > summary { cursor: pointer; color: var(--text-2); font-size: .
   input[type="search"] { min-width: 0; width: 100%; }
   .filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .filtros select, .filtros input { width: 100%; }
+  .filtros [data-limpar] { grid-column: 1 / -1; justify-self: start; }
 }

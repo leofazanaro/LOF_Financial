@@ -10,11 +10,13 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const qs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== '' && v != null)).toString();
 
-/** "1.234,56" | "900" | "R$ 50,5" -> centavos; vazio -> null */
+/** "1.234,56" | "1.300" | "900" | "R$ 50,5" -> centavos; vazio -> null */
 function lerValor(txt) {
   const s = String(txt).replace(/R\$|\s/g, '');
   if (!s) return null;
-  const n = Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+  // "1.300" é mil e trezentos (ponto de milhar), não 1,3.
+  const milhar = /^\d{1,3}(\.\d{3})+$/.test(s);
+  const n = Number(s.includes(',') || milhar ? s.replace(/\./g, '').replace(',', '.') : s);
   if (!Number.isFinite(n) || n <= 0) throw new Error('Valor inválido');
   return Math.round(n * 100);
 }
@@ -94,7 +96,7 @@ const nomeCartao = (banco, final) => {
 const bolinha = (cor) => `<span class="bolinha" style="background:${esc(cor || 'var(--text-3)')}" aria-hidden="true"></span>`;
 
 /** Barra de filtros: período (mês da fatura), banco, cartão e, opcionalmente, categoria, etiqueta e busca. */
-function barraFiltros(filtros, { periodo = true, categoria = false, etiqueta = false, busca = false } = {}) {
+function barraFiltros(filtros, { periodo = true, bancos = true, categoria = false, etiqueta = false, busca = false } = {}) {
   const sel = (nome, rotulo, itens, todos = 'Todos') => `
     <label>${rotulo}
       <select name="${nome}">
@@ -105,8 +107,8 @@ function barraFiltros(filtros, { periodo = true, categoria = false, etiqueta = f
   const refs = opcoes.referencias.map((r) => [r, mes(r)]);
   return `${periodo ? seletorMes(filtros) : ''}<form class="filtros" data-filtros>
     ${periodo ? sel('de', 'De (fatura)', refs, 'Início') + sel('ate', 'Até (fatura)', refs, 'Fim') : ''}
-    ${sel('banco', 'Banco', opcoes.bancos.map((b) => [b, nomeBanco(b)]))}
-    ${sel('cartao', 'Cartão', opcoes.cartoes.map((c) => [c.cartao_final, `${nomeBanco(c.banco)} ${nomeCartao(c.banco, c.cartao_final)}`]))}
+    ${bancos ? sel('banco', 'Banco', opcoes.bancos.map((b) => [b, nomeBanco(b)])) : ''}
+    ${bancos ? sel('cartao', 'Cartão', opcoes.cartoes.map((c) => [c.cartao_final, `${nomeBanco(c.banco)} ${nomeCartao(c.banco, c.cartao_final)}`])) : ''}
     ${categoria ? sel('categoria', 'Categoria', [['sem', 'Sem categoria'], ...opcoes.categorias.map((c) => [c.id, c.nome])], 'Todas') : ''}
     ${etiqueta && opcoes.etiquetas.length ? sel('etiqueta', 'Etiqueta', opcoes.etiquetas.map((e) => [e.id, e.nome]), 'Todas') : ''}
     ${busca ? `<label>Busca<input type="search" name="q" value="${esc(filtros.q ?? '')}" placeholder="descrição ou apelido"></label>` : ''}
@@ -359,11 +361,12 @@ function tabelaSimples(linhas) {
 // ---------- visão geral ----------
 
 async function telaVisaoGeral({ filtros }) {
-  const [r, parcelas, orc, comp] = await Promise.all([
+  const [r, parcelas, orc, comp, bal] = await Promise.all([
     api(`/api/resumo?${qs(filtros)}`),
     api(`/api/parcelas?${qs({ banco: filtros.banco, cartao: filtros.cartao })}`),
     api(`/api/orcamento?${qs({ referencia: filtros.ate })}`),
     api(`/api/comparacao?${qs(filtros)}`),
+    api(`/api/balanco?${qs({ de: filtros.de, ate: filtros.ate })}`),
   ]);
   if (!r.qtd && !Object.keys(filtros).length) {
     $app.innerHTML = `<h1>Visão geral</h1><p class="sub">Nenhuma fatura importada ainda. <a href="#/importar">Importe um CSV ou PDF</a>.</p>`;
@@ -387,6 +390,7 @@ async function telaVisaoGeral({ filtros }) {
         <div class="val">${r.pendentes}</div>
         ${r.pendentes ? `<a href="#/transacoes?${qs({ ...filtros, categoria: 'sem' })}">${brl(r.totalPendentes)} · classificar</a>` : '<span class="muted">tudo classificado</span>'}
       </div>
+      ${cardBalanco(bal, filtros)}
     </div>
     <div class="grade">
       <section class="painel"><div class="titulo-acoes"><h2>Gasto por ${visaoCategorias() === 'grupo' ? 'grupo' : 'categoria'}</h2>
@@ -434,6 +438,45 @@ async function telaVisaoGeral({ filtros }) {
   graficoMeses(document.getElementById('g-mes'), r.porMesBanco);
 }
 
+/**
+ * Renda × saídas: a barra inteira é a renda; gastos e investido a preenchem e o resto é a sobra.
+ * Se as saídas passam da renda, os dois pedaços encolhem na mesma proporção e a ponta fica vermelha.
+ */
+function cardBalanco(b, filtros) {
+  const link = `#/renda?${qs({ de: filtros.de, ate: filtros.ate })}`;
+  const semRenda = b.mesesSemRenda.length
+    ? `<p class="muted nota-renda">Sem renda lançada em ${b.mesesSemRenda.map(mes).join(', ')}.</p>` : '';
+  if (!b.renda) {
+    return `<div class="card balanco"><div class="balanco-topo"><div class="rot">Renda × gastos e investimentos</div></div>
+      <p>Nenhuma renda lançada no período. <a href="${link}">Lançar renda</a></p>
+      <span class="muted">Gastos ${brl(b.gastos)} · ${b.investido < 0 ? `resgate de ${brl(-b.investido)}` : `investido ${brl(b.investido)}`}</span></div>`;
+  }
+  const investido = Math.max(b.investido, 0);
+  const saidas = b.gastos + investido;
+  const escala = Math.max(b.renda, saidas);
+  const larg = (v) => `${((v / escala) * 100).toFixed(2)}%`;
+  const parte = (v) => pct(v / b.renda);
+  const estourou = saidas > b.renda;
+  return `<div class="card balanco">
+    <div class="balanco-topo"><div class="rot">Renda × gastos e investimentos</div><a href="${link}">lançar renda</a></div>
+    <div class="val">${brl(b.renda)} <span class="muted">de renda</span></div>
+    <div class="barra-renda ${estourou ? 'estourou' : ''}" role="img"
+      aria-label="Gastos ${parte(b.gastos)}, investido ${parte(investido)} da renda${estourou ? ', acima da renda' : ''}">
+      <span class="seg-gasto" style="width:${larg(b.gastos)}"></span>
+      ${investido ? `<span class="seg-investido" style="width:${larg(investido)}"></span>` : ''}
+      ${estourou ? `<span class="excesso" style="left:${larg(b.renda)}"></span>` : ''}
+    </div>
+    <ul class="legenda-renda">
+      <li><span class="quadro seg-gasto" aria-hidden="true"></span>Gastos <b>${brl(b.gastos)}</b> · ${parte(b.gastos)}</li>
+      <li>${b.investido < 0 ? `<span class="quadro" aria-hidden="true"></span>Resgate de <b>${brl(-b.investido)}</b>`
+        : `<span class="quadro seg-investido" aria-hidden="true"></span>Investido <b>${brl(investido)}</b> · ${parte(investido)}`}</li>
+      <li>${estourou ? `<span class="quadro excesso" aria-hidden="true"></span><b>${brl(saidas - b.renda)}</b> acima da renda`
+        : `<span class="quadro seg-sobra" aria-hidden="true"></span>Sobra <b>${brl(b.renda - saidas)}</b> · ${parte(b.renda - saidas)}`}</li>
+    </ul>
+    ${semRenda}
+  </div>`;
+}
+
 /** Visão do gráfico de gasto no painel ('grupo' ou 'categoria'); lembrada só neste navegador. */
 function visaoCategorias(nova) {
   if (nova) { try { localStorage.setItem('visaoCategorias', nova); } catch { /* sem armazenamento */ } return nova; }
@@ -457,6 +500,81 @@ async function telaCategoria({ param, filtros }) {
   if (r.qtd) graficoMeses(document.getElementById('g-mes'), r.porMesBanco);
   ligarEditor();
 }
+
+// ---------- renda ----------
+
+let rendaEditando = null; // null = formulário fechado; 'nova' ou o id em edição
+
+async function telaRenda({ filtros }) {
+  const lista = await api(`/api/renda?${qs({ de: filtros.de, ate: filtros.ate })}`);
+  const editando = rendaEditando === 'nova' ? {} : lista.find((l) => l.id === rendaEditando);
+  if (rendaEditando !== 'nova' && !editando) rendaEditando = null;
+  const total = lista.reduce((s, l) => s + l.valor_centavos, 0);
+  // Mês que o botão "repetir" preenche: o mês filtrado ou, sem filtro de um mês só, o mês atual.
+  const alvo = filtros.de && filtros.de === filtros.ate ? filtros.de : new Date().toLocaleDateString('sv-SE').slice(0, 7);
+  const alvoVazio = !lista.some((l) => l.data.startsWith(alvo)) && (filtros.de === filtros.ate || !filtros.de);
+  const porMes = Map.groupBy(lista, (l) => l.data.slice(0, 7));
+  $app.innerHTML = `
+    <h1>Renda</h1>
+    <p class="sub">Salário, freelas e outras entradas. Contam no mês do recebimento e aparecem na visão geral
+      comparadas com os gastos e os aportes do mesmo período.${lista.length ? ` ${lista.length} lançamentos · ${brl(total)}.` : ''}</p>
+    ${barraFiltros(filtros, { bancos: false })}
+    <section class="painel bloco">
+      ${rendaEditando ? formRenda(editando) : `<div class="lista-linha"><button class="link" id="nova-renda">+ Nova renda</button>
+        ${alvoVazio ? `<button class="link" id="repetir-renda">repetir a renda de ${mes(mesAntes(alvo))} em ${mes(alvo)}</button>` : ''}</div>`}
+    </section>
+    <section class="painel">${lista.length ? `<div class="tabela-wrap"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th></th></tr></thead>
+      <tbody>${[...porMes].map(([ref, ls]) => `
+        <tr class="mes-renda"><th colspan="2">${mes(ref)}</th><th class="num">${brl(ls.reduce((s, l) => s + l.valor_centavos, 0))}</th><th></th></tr>
+        ${ls.map((l) => `<tr data-id="${l.id}"><td>${dataBR(l.data)}</td><td>${esc(l.descricao)}</td>
+          <td class="num">${brl(l.valor_centavos)}</td>
+          <td class="acoes"><button class="link" data-editar>editar</button> · <button class="link perigo" data-apagar>apagar</button></td></tr>`).join('')}`).join('')}
+      </tbody></table></div>` : '<p class="muted">Nenhuma renda lançada no período.</p>'}</section>`;
+  ligarFiltros('renda');
+  document.getElementById('nova-renda')?.addEventListener('click', () => { rendaEditando = 'nova'; render(); });
+  document.getElementById('cancelar-renda')?.addEventListener('click', () => { rendaEditando = null; render(); });
+  document.getElementById('repetir-renda')?.addEventListener('click', () => acao(
+    () => api('/api/renda/repetir', { method: 'POST', body: { referencia: alvo } }),
+    (r) => `${r.qtd} lançamento${r.qtd > 1 ? 's' : ''} copiado${r.qtd > 1 ? 's' : ''} para ${mes(alvo)}`));
+  $app.querySelectorAll('[data-editar]').forEach((b) => b.addEventListener('click', () => {
+    rendaEditando = Number(b.closest('tr').dataset.id);
+    render();
+  }));
+  $app.querySelectorAll('[data-apagar]').forEach((b) => b.addEventListener('click', () => {
+    const l = lista.find((x) => x.id === Number(b.closest('tr').dataset.id));
+    if (confirm(`Apagar "${l.descricao}" (${brl(l.valor_centavos)}) de ${dataBR(l.data)}?`)) {
+      acao(() => api(`/api/renda/${l.id}`, { method: 'DELETE' }), 'Renda apagada');
+    }
+  }));
+  document.getElementById('form-renda')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    let valorCentavos;
+    try { valorCentavos = lerValor(d.valor); if (!(valorCentavos > 0)) throw new Error(); } catch { return aviso('Valor inválido', true); }
+    const body = { descricao: d.descricao, valorCentavos, data: d.data };
+    const id = editando?.id;
+    acao(() => api(id ? `/api/renda/${id}` : '/api/renda', { method: id ? 'PUT' : 'POST', body }),
+      id ? 'Renda salva' : 'Renda lançada').then((ok) => { if (ok) { rendaEditando = null; render(); } });
+  });
+}
+
+function formRenda(l) {
+  const hoje = new Date().toLocaleDateString('sv-SE');
+  return `<h2>${l.id ? 'Editar renda' : 'Nova renda'}</h2>
+    <form id="form-renda" class="campos">
+      <label class="largo">Descrição<input name="descricao" required maxlength="120" value="${esc(l.descricao ?? '')}" placeholder="ex.: Salário, Freela"></label>
+      <label>Valor (R$)<input name="valor" required inputmode="decimal" value="${reaisCampo(l.valor_centavos)}" placeholder="ex.: 5.000,00"></label>
+      <label>Recebido em<input type="date" name="data" required value="${l.data ?? hoje}"></label>
+      <div class="barra-acoes largo"><button class="primario">${l.id ? 'Salvar' : 'Lançar renda'}</button>
+        <button type="button" class="link" id="cancelar-renda">cancelar</button></div>
+    </form>`;
+}
+
+const mesAntes = (ref) => {
+  const [a, m] = ref.split('-').map(Number);
+  return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`;
+};
 
 // ---------- transações ----------
 
@@ -1774,6 +1892,7 @@ const TELAS = {
   '': telaVisaoGeral, transacoes: telaTransacoes, categoria: telaCategoria, parcelas: telaParcelas,
   assinaturas: telaAssinaturas, orcamento: telaOrcamento, importar: telaImportar, regras: telaRegras,
   desconsiderados: telaDesconsiderados, categorias: telaCategorias, bancos: telaBancos, patrimonio: telaPatrimonio,
+  renda: telaRenda,
 };
 
 async function render() {

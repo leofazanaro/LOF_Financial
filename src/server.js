@@ -13,6 +13,7 @@ import {
 import { apagarBanco, criarBanco, definirApelidoCartao, editarBanco, listarBancos } from './bancos.js';
 import * as patrimonio from './patrimonio.js';
 import { apagarConta, editarConta, lancarConta } from './contas.js';
+import { apagarRenda, balanco, editarRenda, lancarRenda, listarRendas, repetirMesAnterior } from './renda.js';
 import * as analises from './analises.js';
 import { definirApelido, desetiquetar, etiquetar, removerEtiqueta } from './marcacoes.js';
 import {
@@ -96,6 +97,22 @@ export function criarApp({
     async (req) => lancarConta(db, req.body));
   app.put('/api/contas/:id', { schema: { ...paramIdNum, body: CONTA } }, async (req) => editarConta(db, req.params.id, req.body));
   app.delete('/api/contas/:id', { schema: paramIdNum }, async (req) => apagarConta(db, req.params.id));
+
+  // Renda lançada à mão: conta no mês do recebimento e é comparada com gastos e aportes.
+  const RENDA = {
+    type: 'object',
+    properties: { data: CONTA.properties.data, descricao: CONTA.properties.descricao, valorCentavos: CONTA.properties.valorCentavos },
+    additionalProperties: false,
+  };
+  app.get('/api/renda', async (req) => listarRendas(db, req.query));
+  app.post('/api/renda', { schema: { body: { ...RENDA, required: ['data', 'descricao', 'valorCentavos'] } } },
+    async (req) => lancarRenda(db, req.body));
+  app.put('/api/renda/:id', { schema: { ...paramIdNum, body: RENDA } }, async (req) => editarRenda(db, req.params.id, req.body));
+  app.delete('/api/renda/:id', { schema: paramIdNum }, async (req) => apagarRenda(db, req.params.id));
+  app.post('/api/renda/repetir', {
+    schema: { body: { type: 'object', properties: { referencia: { type: 'string', pattern: '^\\d{4}-\\d{2}$' } }, required: ['referencia'] } },
+  }, async (req) => repetirMesAnterior(db, req.body.referencia));
+  app.get('/api/balanco', async (req) => balanco(db, req.query));
 
   // Ações em lote: mesma categoria para várias transações.
   app.post('/api/transacoes/categoria', {

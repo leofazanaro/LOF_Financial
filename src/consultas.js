@@ -79,6 +79,12 @@ export function resumo(db, filtros) {
   return { ...totais, porCategoria, porMesBanco, maiores, desconsiderados };
 }
 
+/** Gasto total do período (todos os bancos e cartões), para comparar com a renda. */
+export function totalGasto(db, { de, ate } = {}) {
+  const { sql, args } = filtrar({ de, ate });
+  return db.prepare(`SELECT coalesce(sum(t.valor_centavos), 0) AS total ${FROM} WHERE ${sql}`).get(...args).total;
+}
+
 export function transacoes(db, filtros) {
   const { sql, args } = filtrar(filtros);
   return comEtiquetas(db.prepare(`SELECT t.id, t.banco, t.cartao_final, f.referencia, t.data, t.descricao,
