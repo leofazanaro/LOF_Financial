@@ -11,6 +11,7 @@ Importe as faturas do cartão, deixe as regras categorizarem os gastos e acompan
 ![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite&logoColor=white)
 ![ECharts](https://img.shields.io/badge/ECharts-6-AA344D?logo=apacheecharts&logoColor=white)
 ![Sem build](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20sem%20build-F7DF1E?logo=javascript&logoColor=black)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
 <br>
 
@@ -150,8 +151,12 @@ Crie um módulo em `src/importers/` que exporte `detectar({ nome, texto })` e `i
 
 Tudo roda na sua máquina: sem conta, sem nuvem, sem telemetria. Os dados ficam num único arquivo SQLite que é seu.
 
+## 📄 Licença
+
+Distribuído sob a licença [MIT](LICENSE). Use, modifique e compartilhe à vontade.
+
 ---
 
 <div align="center">
-<sub>Feito para uso pessoal por <a href="https://github.com/leofazanaro">Leonardo Fazanaro</a>.</sub>
+<sub>Feito com ☕ por <a href="https://github.com/leofazanaro">Leonardo Fazanaro</a>.</sub>
 </div>
