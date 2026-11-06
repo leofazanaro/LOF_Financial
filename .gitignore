@@ -1,0 +1,13 @@
+node_modules
+data/
+.env
+.claude/
+
+# Dados financeiros nunca vão para o repositório
+*.db
+*.db-*
+*.sqlite
+*.ofx
+*.pdf
+*.csv
+*.xlsx

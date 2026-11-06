@@ -1,0 +1,16 @@
+services:
+  painel:
+    build: .
+    image: painel-financeiro
+    container_name: painel-financeiro
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: 0.0.0.0
+      TZ: America/Sao_Paulo
